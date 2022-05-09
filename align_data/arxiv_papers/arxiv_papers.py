@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import json
+from time import sleep
 import jsonlines
 import chardet
 import pandas as pd
@@ -16,6 +17,7 @@ import multiprocessing as mp
 import argparse
 from align_data.common.utils import *
 import arxiv
+import wget
 
 
 class ArxivPapers:
@@ -82,17 +84,8 @@ class ArxivPapers:
             os.remove("data/arxiv_pandoc.txt")
 
         print("Converting arxiv_dict.json to arxiv.jsonl and arxiv.txt...")
-        for i, paper in enumerate(self.arxiv_list_of_dicts):
-            i = str(i)
+        for paper in self.arxiv_list_of_dicts:
             yield paper
-            # with jsonlines.open("data/arxiv_pandoc.jsonl", "a") as writer:
-            #     writer.write(paper)
-            # with open("data/arxiv_pandoc.txt", "a") as f:
-            #     # Save the entry in plain text, mainly for debugging
-            #     text = (
-            #         "    ".join(("\n" + paper["text"].lstrip()).splitlines(True)) + "\n"
-            #     )
-            #     f.write(f"[ENTRY {i}] {text}")
 
         # delete_unwanted_files = input(
         #     "Delete unwanted files (only keep .jsonl and main .txt files)? (y/n) "
@@ -125,7 +118,6 @@ class ArxivPapers:
         else:
             self.arxiv_dict = {}
 
-
         # Delete contents before starting?
         # This is useful when you are testing and want to start from scratch
         delete_contents = input("Delete data before starting? (y/n) ")
@@ -146,11 +138,6 @@ class ArxivPapers:
         )
         self.remove_empty_papers = "y"  # replace with input() later
 
-        # TODO: add option to remove empty papers
-        #
-        #
-        #
-        #
         if self.citation_level != "0":
             pass
 
@@ -216,7 +203,7 @@ class ArxivPapers:
 
         self.main_tex_name_list = [f"{item}.tex" for item in main_tex_name_list]
 
-        sh("cp ai-alignment-papers.csv data/raw/csvs/ai-alignment-papers.csv")
+        wget.download("https://github.com/JayThibs/ai-safety-scrape/raw/main/ai-alignment-papers.csv", out="data/raw/csvs/ai-alignment-papers.csv")
 
     def download_arxiv_papers(
         self,
@@ -279,6 +266,7 @@ class ArxivPapers:
                     and paper.get_short_id()[:-2] in self.arxiv_dict.keys()
                 ):
                     print(f"Skipping {paper_id} because it is already in dictionary.")
+                    sleep(0.5) # need to add here to avoid getting banned, the "continue" statement below allows for too many quick arxiv.Search() calls
                     continue
                 self.arxiv_dict[paper.get_short_id()[:-2]] = {
                     "source": "arxiv",
@@ -310,8 +298,9 @@ class ArxivPapers:
             except:
                 incorrect_links_ids.append([paper_link, paper_id])
                 pass
-
+            
             try:
+                sleep(0.5)
                 if pdf:
                     paper.download_pdf(dirpath=str(self.ARXIV_PDFS_DIR))
                 else:
@@ -771,7 +760,8 @@ class ArxivPapers:
         all_citations = {}
         for paper_id in self.arxiv_citations_dict.keys():
             for citation in self.arxiv_citations_dict[paper_id].keys():
-                all_citations[citation] = True
+                if citation not in self.arxiv_dict:
+                    all_citations[citation] = True
         all_citations = pd.DataFrame(list(all_citations.keys()))
         all_citations.to_csv(
             f"{self.PROCESSED_CSVS_DIR}/all_citations_level_{new_citation_level}.csv",
